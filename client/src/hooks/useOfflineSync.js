@@ -6,7 +6,7 @@ import axios from 'axios';
 export function useOfflineSync() {
   useEffect(() => {
     async function flush() {
-      const { items, keys, clear } = await dequeueAll();
+      const { items, clear } = await dequeueAll();
       if (!items.length) return;
       const { data: { session } } = await supabase.auth.getSession();
       for (const { payload } of items) {
