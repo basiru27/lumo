@@ -7,18 +7,24 @@ import EditListing from './pages/EditListing';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import ProtectedRoute from './components/ProtectedRoute';
-import OfflineBanner from './components/OfflineBanner';
+import Layout from './components/Layout';
+import ErrorBoundary from './components/ErrorBoundary';
+import { ToastProvider } from './components/ui';
 import { useOfflineSync } from './hooks/useOfflineSync';
 
 const qc = new QueryClient({
-  defaultOptions: { queries: { staleTime: 1000 * 60 * 5 } }
+  defaultOptions: { 
+    queries: { 
+      staleTime: 1000 * 60 * 5,
+      retry: 1,
+    } 
+  }
 });
 
 function AppContent() {
-  useOfflineSync(); // activate globally
+  useOfflineSync();
   return (
-    <>
-      <OfflineBanner />
+    <Layout>
       <Routes>
         <Route path='/' element={<Home />} />
         <Route path='/listings/:id' element={<ListingDetail />} />
@@ -29,16 +35,20 @@ function AppContent() {
           <Route path='/listings/:id/edit' element={<EditListing />} />
         </Route>
       </Routes>
-    </>
+    </Layout>
   );
 }
 
 export default function App() {
   return (
-    <QueryClientProvider client={qc}>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={qc}>
+        <BrowserRouter>
+          <ToastProvider>
+            <AppContent />
+          </ToastProvider>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
