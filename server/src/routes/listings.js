@@ -7,30 +7,58 @@ const router = express.Router();
 
 // ── GET /api/listings (public) ──────────────────────────────────────
 router.get('/', async (req, res) => {
-  const { region, category, q, page = 1 } = req.query;
-  const limit = 20;
-  const from = (page - 1) * limit;
+  const { region, category, q, page = 1, limit = 20 } = req.query;
+  const pageNum = Math.max(1, parseInt(page) || 1);
+  const limitNum = Math.min(50, Math.max(1, parseInt(limit) || 20));
+  const from = (pageNum - 1) * limitNum;
 
-  let query = supabase
-    .from('listings')
-    .select(`*, regions(name), categories(name), profiles(email)`)
-    .order('created_at', { ascending: false })
-    .range(from, from + limit - 1);
+  try {
+    // Look up region and category IDs if filters are provided
+    let regionId = null;
+    let categoryId = null;
 
-  if (region) query = query.eq('regions.name', region);
-  if (category) query = query.eq('categories.name', category);
-  if (q) query = query.ilike('title', `%${q}%`);
+    if (region) {
+      const { data: regionData } = await supabase
+        .from('regions')
+        .select('id')
+        .eq('name', region)
+        .single();
+      regionId = regionData?.id;
+    }
 
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+    if (category) {
+      const { data: categoryData } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('name', category)
+        .single();
+      categoryId = categoryData?.id;
+    }
+
+    let query = supabase
+      .from('listings')
+      .select(`*, regions(name), categories(name)`)
+      .order('created_at', { ascending: false })
+      .range(from, from + limitNum - 1);
+
+    if (regionId) query = query.eq('region_id', regionId);
+    if (categoryId) query = query.eq('category_id', categoryId);
+    if (q) query = query.ilike('title', `%${q}%`);
+
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  } catch (err) {
+    console.error('Error fetching listings:', err);
+    res.status(500).json({ error: 'Failed to fetch listings' });
+  }
 });
 
 // ── GET /api/listings/:id (public) ──────────────────────────────────
 router.get('/:id', async (req, res) => {
   const { data, error } = await supabase
     .from('listings')
-    .select(`*, regions(name), categories(name), profiles(email)`)
+    .select(`*, regions(name), categories(name)`)
     .eq('id', req.params.id)
     .single();
 
@@ -53,9 +81,17 @@ router.post('/', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid region or category' });
   }
 
+  // Extract only the fields that exist in the database
+  const { region: _region, category: _category, ...listingData } = parsed.data;
+
   const { data, error } = await supabase
     .from('listings')
-    .insert({ ...parsed.data, user_id: req.userId, region_id: region.id, category_id: category.id })
+    .insert({ 
+      ...listingData, 
+      user_id: req.userId, 
+      region_id: region.id, 
+      category_id: category.id 
+    })
     .select()
     .single();
 
